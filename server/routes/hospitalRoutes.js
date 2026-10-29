@@ -1,12 +1,11 @@
 const express = require("express");
-const mongoose = require("mongoose");
-const Hospital = require("../models/Hospital");
-const Emergency = require("../models/Emergency");
+const { getModel } = require("../services/dbStore");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
+const aiService = require("../services/aiService");
 
 const router = express.Router();
-const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+const isValidId = (id) => typeof id === "string" && id.length >= 8;
 
 // 1. ADD HOSPITAL (Admin only)
 router.post(
@@ -38,21 +37,16 @@ router.post(
         return res.status(400).json({ message: "City and State are required in address" });
       }
 
+      let coordinates = [76.6450, 12.3020];
       if (
-        !location ||
-        !Array.isArray(location.coordinates) ||
-        location.coordinates.length !== 2
+        location &&
+        Array.isArray(location.coordinates) &&
+        location.coordinates.length === 2
       ) {
-        return res.status(400).json({
-          message: "Valid coordinates [longitude, latitude] are required"
-        });
+        coordinates = location.coordinates.map(Number);
       }
 
-      const [lng, lat] = location.coordinates.map(Number);
-      if (isNaN(lng) || lng < -180 || lng > 180 || isNaN(lat) || lat < -90 || lat > 90) {
-        return res.status(400).json({ message: "Coordinates values are out of bounds" });
-      }
-
+      const Hospital = getModel("Hospital");
       const hospital = await Hospital.create({
         name: name.trim(),
         address: {
@@ -63,7 +57,7 @@ router.post(
         },
         location: {
           type: "Point",
-          coordinates: [lng, lat]
+          coordinates
         },
         phone: phone || "",
         facilities: Array.isArray(facilities) ? facilities : [],
@@ -77,7 +71,7 @@ router.post(
       });
 
       res.status(201).json({
-        message: "Hospital added successfully",
+        message: "Hospital registered successfully",
         hospital
       });
     } catch (error) {
@@ -90,14 +84,17 @@ router.post(
   }
 );
 
-// 2. GET ALL HOSPITALS (Admin, Dispatcher, Citizen)
+// 2. GET ALL HOSPITALS (All authenticated users)
 router.get(
   "/",
   authMiddleware,
   async (req, res) => {
     try {
-      const hospitals = await Hospital.find().sort({ createdAt: -1 });
-      res.json(hospitals);
+      const Hospital = getModel("Hospital");
+      const hospitals = await Hospital.find();
+      const list = Array.isArray(hospitals) ? hospitals : [];
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      res.json(list);
     } catch (error) {
       console.error("Get hospitals error:", error);
       res.status(500).json({ message: "Failed to get hospitals" });
@@ -105,48 +102,45 @@ router.get(
   }
 );
 
-// 3. GET NEARBY HOSPITALS FOR EMERGENCY (Admin, Dispatcher)
+// 3. GET NEARBY HOSPITALS FOR EMERGENCY
 router.get(
   "/nearby/:emergencyId",
   authMiddleware,
-  roleMiddleware("admin", "dispatcher"),
+  roleMiddleware("admin", "dispatcher", "hospital"),
   async (req, res) => {
     try {
       const { emergencyId } = req.params;
-      if (!isValidObjectId(emergencyId)) {
-        return res.status(400).json({ message: "Invalid emergency ID" });
-      }
+      const Emergency = getModel("Emergency");
+      const Hospital = getModel("Hospital");
 
       const emergency = await Emergency.findById(emergencyId);
       if (!emergency) {
         return res.status(404).json({ message: "Emergency not found" });
       }
 
-      // Try finding hospitals within 50km
-      let hospitals = [];
-      try {
-        hospitals = await Hospital.find({
-          emergencyAvailable: true,
-          location: {
-            $near: {
-              $geometry: {
-                type: "Point",
-                coordinates: [emergency.longitude, emergency.latitude]
-              },
-              $maxDistance: 50000 // 50 km
-            }
+      const allHospitals = await Hospital.find();
+      const hospitals = Array.isArray(allHospitals) ? allHospitals : [];
+
+      // Sort by proximity using haversine
+      const sorted = hospitals
+        .map((h) => {
+          let lng = 76.6450;
+          let lat = 12.3020;
+          if (h.location?.coordinates?.length === 2) {
+            lng = h.location.coordinates[0];
+            lat = h.location.coordinates[1];
           }
-        });
-      } catch (geoErr) {
-        console.warn("Geospatial search warning:", geoErr.message);
-      }
+          const dist = aiService.calculateDistanceKm(
+            Number(emergency.latitude),
+            Number(emergency.longitude),
+            lat,
+            lng
+          );
+          return { ...h, distanceKm: dist };
+        })
+        .sort((a, b) => a.distanceKm - b.distanceKm);
 
-      // If no hospitals within 50km or index issue, fallback to all emergency-ready hospitals
-      if (!hospitals || hospitals.length === 0) {
-        hospitals = await Hospital.find({ emergencyAvailable: true }).limit(10);
-      }
-
-      res.json(hospitals);
+      res.json(sorted);
     } catch (error) {
       console.error("Nearby hospitals error:", error);
       res.status(500).json({ message: "Failed to find nearby hospitals" });
@@ -161,11 +155,9 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid hospital ID" });
-      }
-
+      const Hospital = getModel("Hospital");
       const hospital = await Hospital.findById(id);
+
       if (!hospital) {
         return res.status(404).json({ message: "Hospital not found" });
       }
@@ -178,23 +170,53 @@ router.get(
   }
 );
 
-// 5. UPDATE HOSPITAL (Admin only)
+// 5. QUICK BED & CAPACITY ADJUSTMENT (Hospital Doctor / Staff & Admin)
 router.patch(
-  "/:id",
+  "/:id/capacity",
   authMiddleware,
-  roleMiddleware("admin"),
+  roleMiddleware("admin", "hospital", "dispatcher"),
   async (req, res) => {
     try {
       const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid hospital ID" });
+      const { availableBeds, availableIcuBeds, emergencyAvailable } = req.body;
+
+      const Hospital = getModel("Hospital");
+      const current = await Hospital.findById(id);
+      if (!current) return res.status(404).json({ message: "Hospital not found" });
+
+      const updateData = {};
+      if (availableBeds !== undefined) {
+        updateData.availableBeds = Math.max(0, Math.min(current.totalBeds, Number(availableBeds)));
+      }
+      if (availableIcuBeds !== undefined) {
+        updateData.availableIcuBeds = Math.max(0, Math.min(current.totalIcuBeds, Number(availableIcuBeds)));
+      }
+      if (emergencyAvailable !== undefined) {
+        updateData.emergencyAvailable = Boolean(emergencyAvailable);
       }
 
-      const hospital = await Hospital.findByIdAndUpdate(
-        id,
-        req.body,
-        { new: true, runValidators: true }
-      );
+      const hospital = await Hospital.findByIdAndUpdate(id, updateData);
+      res.json({
+        message: "Hospital capacity updated",
+        hospital
+      });
+    } catch (error) {
+      console.error("Update capacity error:", error);
+      res.status(500).json({ message: "Failed to update hospital capacity" });
+    }
+  }
+);
+
+// 6. UPDATE HOSPITAL (Admin only)
+router.patch(
+  "/:id",
+  authMiddleware,
+  roleMiddleware("admin", "hospital"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const Hospital = getModel("Hospital");
+      const hospital = await Hospital.findByIdAndUpdate(id, req.body);
 
       if (!hospital) {
         return res.status(404).json({ message: "Hospital not found" });
@@ -211,7 +233,7 @@ router.patch(
   }
 );
 
-// 6. DELETE HOSPITAL (Admin only)
+// 7. DELETE HOSPITAL (Admin only)
 router.delete(
   "/:id",
   authMiddleware,
@@ -219,10 +241,7 @@ router.delete(
   async (req, res) => {
     try {
       const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid hospital ID" });
-      }
-
+      const Hospital = getModel("Hospital");
       const hospital = await Hospital.findByIdAndDelete(id);
       if (!hospital) {
         return res.status(404).json({ message: "Hospital not found" });

@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useToast } from "./ToastContext";
+import { API_BASE } from "../config/api";
 
-const API_BASE = "http://localhost:5000/api";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -88,18 +88,23 @@ export function AuthProvider({ children }) {
     };
   }, [logout]);
 
-  // Google Login
-  const loginWithGoogle = async (credential) => {
+  // Google Login with Role & Facility Linking
+  const loginWithGoogle = async (credential, options = {}) => {
     try {
       setLoading(true);
-      const res = await axios.post(`${API_BASE}/auth/google`, { credential });
+      const res = await axios.post(`${API_BASE}/auth/google`, {
+        credential,
+        preferredRole: options.preferredRole,
+        hospitalId: options.hospitalId,
+        ambulanceDetails: options.ambulanceDetails
+      });
       const newToken = res.data.token;
       const newUser = res.data.user;
 
       localStorage.setItem("token", newToken);
       setToken(newToken);
       setUser(newUser);
-      toast.success(`Welcome, ${newUser.name}! Logged in as ${newUser.role}`);
+      toast.success(`Welcome, ${newUser.name}! Logged in as ${newUser.role.toUpperCase()}`);
       return { success: true, user: newUser };
     } catch (err) {
       const msg = err.response?.data?.message || "Google authentication failed";
@@ -110,11 +115,15 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Demo Login (Citizen, Dispatcher, Admin)
-  const loginWithDemo = async (role) => {
+  // Demo Login (Citizen, Hospital Admin, Ambulance Driver, Dispatcher, Admin)
+  const loginWithDemo = async (role, hospitalId = null, ambulanceId = null) => {
     try {
       setLoading(true);
-      const res = await axios.post(`${API_BASE}/auth/demo-login`, { role });
+      const res = await axios.post(`${API_BASE}/auth/demo-login`, {
+        role,
+        hospitalId,
+        ambulanceId
+      });
       const newToken = res.data.token;
       const newUser = res.data.user;
 
@@ -131,6 +140,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   };
+
 
   return (
     <AuthContext.Provider

@@ -1,30 +1,29 @@
 const express = require("express");
-const mongoose = require("mongoose");
-const Ambulance = require("../models/Ambulance");
-const Emergency = require("../models/Emergency");
+const { getModel } = require("../services/dbStore");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 const router = express.Router();
-const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+const isValidId = (id) => typeof id === "string" && id.length >= 8;
 
-// 1. GET ALL AMBULANCES (Admin & Dispatcher)
+// 1. GET ALL AMBULANCES (Admin, Dispatcher, Driver)
 router.get(
   "/",
   authMiddleware,
-  roleMiddleware("admin", "dispatcher"),
+  roleMiddleware("admin", "dispatcher", "hospital", "driver"),
   async (req, res) => {
     try {
+      const Ambulance = getModel("Ambulance");
       const filter = {};
       if (req.query.status) {
         filter.status = req.query.status;
       }
 
-      const ambulances = await Ambulance.find(filter)
-        .populate("emergencyId")
-        .sort({ createdAt: -1 });
+      const ambulances = await Ambulance.find(filter);
+      const list = Array.isArray(ambulances) ? ambulances : [];
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      res.json(ambulances);
+      res.json(list);
     } catch (error) {
       console.error("Get ambulances error:", error);
       res.status(500).json({ message: "Failed to fetch ambulances" });
@@ -42,39 +41,31 @@ router.patch(
       const { id } = req.params;
       const { emergencyId } = req.body;
 
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid ambulance ID" });
-      }
-      if (!isValidObjectId(emergencyId)) {
-        return res.status(400).json({ message: "Invalid emergency ID" });
-      }
+      if (!isValidId(id)) return res.status(400).json({ message: "Invalid ambulance ID" });
+      if (!isValidId(emergencyId)) return res.status(400).json({ message: "Invalid emergency ID" });
+
+      const Emergency = getModel("Emergency");
+      const Ambulance = getModel("Ambulance");
 
       const emergency = await Emergency.findById(emergencyId);
-      if (!emergency) {
-        return res.status(404).json({ message: "Emergency not found" });
-      }
+      if (!emergency) return res.status(404).json({ message: "Emergency not found" });
 
-      const ambulance = await Ambulance.findByIdAndUpdate(
-        id,
-        {
-          emergencyId,
-          status: "On Duty"
-        },
-        { new: true, runValidators: true }
-      ).populate("emergencyId");
+      const ambulance = await Ambulance.findByIdAndUpdate(id, {
+        emergencyId,
+        status: "On Duty"
+      });
 
-      if (!ambulance) {
-        return res.status(404).json({ message: "Ambulance not found" });
-      }
+      if (!ambulance) return res.status(404).json({ message: "Ambulance not found" });
 
-      // Update emergency to Responding with assigned ambulance
+      // Update emergency to Responding
       await Emergency.findByIdAndUpdate(emergencyId, {
         status: "Responding",
-        ambulanceId: id
+        ambulanceId: id,
+        ambulanceStatus: "En Route"
       });
 
       res.json({
-        message: "Ambulance assigned successfully",
+        message: "Ambulance assigned and en route",
         ambulance
       });
     } catch (error) {
@@ -103,6 +94,8 @@ router.post(
         return res.status(400).json({ message: "Driver phone is required" });
       }
 
+      const Ambulance = getModel("Ambulance");
+
       // Check for duplicate vehicle number
       const existing = await Ambulance.findOne({
         vehicleNumber: vehicleNumber.trim().toUpperCase()
@@ -117,7 +110,11 @@ router.post(
         vehicleNumber: vehicleNumber.trim().toUpperCase(),
         driverName: driverName.trim(),
         driverPhone: driverPhone.trim(),
-        status: "Available"
+        status: "Available",
+        currentLocation: {
+          type: "Point",
+          coordinates: [76.6450, 12.3020]
+        }
       };
 
       if (
@@ -147,27 +144,23 @@ router.post(
   }
 );
 
-// 4. UPDATE AMBULANCE (Admin only)
+// 4. UPDATE AMBULANCE (Admin or Driver)
 router.patch(
   "/:id",
   authMiddleware,
-  roleMiddleware("admin"),
+  roleMiddleware("admin", "driver", "dispatcher"),
   async (req, res) => {
     try {
       const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid ambulance ID" });
-      }
+      if (!isValidId(id)) return res.status(400).json({ message: "Invalid ambulance ID" });
+
+      const Ambulance = getModel("Ambulance");
 
       if (req.body.vehicleNumber) {
         req.body.vehicleNumber = req.body.vehicleNumber.trim().toUpperCase();
       }
 
-      const ambulance = await Ambulance.findByIdAndUpdate(
-        id,
-        req.body,
-        { new: true, runValidators: true }
-      );
+      const ambulance = await Ambulance.findByIdAndUpdate(id, req.body);
 
       if (!ambulance) {
         return res.status(404).json({ message: "Ambulance not found" });
@@ -192,10 +185,9 @@ router.delete(
   async (req, res) => {
     try {
       const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid ambulance ID" });
-      }
+      if (!isValidId(id)) return res.status(400).json({ message: "Invalid ambulance ID" });
 
+      const Ambulance = getModel("Ambulance");
       const ambulance = await Ambulance.findByIdAndDelete(id);
       if (!ambulance) {
         return res.status(404).json({ message: "Ambulance not found" });

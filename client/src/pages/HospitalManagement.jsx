@@ -18,7 +18,7 @@ import {
 import HospitalLocationPicker from "../components/HospitalLocationPicker";
 import { useToast } from "../context/ToastContext";
 
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 const initialFormState = {
   name: "",

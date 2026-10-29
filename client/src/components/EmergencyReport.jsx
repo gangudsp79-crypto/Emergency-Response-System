@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import EmergencyMap from "./EmergencyMap";
+import { API_BASE } from "../config/api";
 
 function EmergencyReport() {
   const [formData, setFormData] = useState({
@@ -28,7 +29,7 @@ function EmergencyReport() {
       const token = localStorage.getItem("token");
 
       const response = await axios.get(
-        "http://localhost:5000/api/emergencies",
+        `${API_BASE}/emergencies`,
         {
           headers: {
             Authorization: `Bearer ${token}`
@@ -59,7 +60,7 @@ function EmergencyReport() {
       const token = localStorage.getItem("token");
 
       const response = await axios.post(
-        "http://localhost:5000/api/emergencies",
+        `${API_BASE}/emergencies`,
         {
           type: formData.type,
           description: formData.description,

@@ -1,0 +1,38 @@
+{
+  "name": "emergency-response-system",
+  "version": "2.4.0",
+  "description": "AI-Powered Emergency Response & Hospital Dispatch Platform",
+  "main": "server/server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "server": "node server/server.js",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "test": "node server/test-api.js",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "postinstall": "npm --prefix client install"
+  },
+  "dependencies": {
+    "@googlemaps/routing": "^3.1.0",
+    "axios": "^1.20.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "google-auth-library": "^11.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.9.2"
+  },
+  "keywords": [
+    "emergency-response",
+    "hospital-dispatch",
+    "ai-triage",
+    "ambulance-tracking",
+    "healthcare",
+    "mysuru"
+  ],
+  "author": "QuickPulse Engineering Team",
+  "license": "MIT"
+}

@@ -7,6 +7,12 @@ const hospitalSchema = new mongoose.Schema(
       required: true
     },
 
+    adminUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+
     address: {
       street: {
         type: String,
@@ -15,12 +21,14 @@ const hospitalSchema = new mongoose.Schema(
 
       city: {
         type: String,
-        required: true
+        required: true,
+        default: "Mysuru"
       },
 
       state: {
         type: String,
-        required: true
+        required: true,
+        default: "Karnataka"
       },
 
       pincode: {
@@ -72,6 +80,16 @@ const hospitalSchema = new mongoose.Schema(
       default: 0
     },
 
+    oxygenBeds: {
+      type: Number,
+      default: 10
+    },
+
+    bloodBankReady: {
+      type: Boolean,
+      default: true
+    },
+
     totalAmbulances: {
       type: Number,
       default: 0
@@ -85,6 +103,11 @@ const hospitalSchema = new mongoose.Schema(
     emergencyAvailable: {
       type: Boolean,
       default: true
+    },
+
+    admittedPatientsCount: {
+      type: Number,
+      default: 0
     }
   },
   {

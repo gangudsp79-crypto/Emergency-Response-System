@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  quickpulse-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quickpulse-emergency-service
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/emergencyResponse
+      - JWT_SECRET=quickpulse_production_jwt_secret_key_mysuru_2026
+      - GOOGLE_CLIENT_ID=536396294111-ertaqgvaiuanjsvq1qigfnu0fkt6jcfj.apps.googleusercontent.com
+      - CORS_ORIGIN=*
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - quickpulse-net
+
+  mongodb:
+    image: mongo:7.0
+    container_name: quickpulse-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - quickpulse-net
+
+volumes:
+  mongo_data:
+    driver: local
+
+networks:
+  quickpulse-net:
+    driver: bridge

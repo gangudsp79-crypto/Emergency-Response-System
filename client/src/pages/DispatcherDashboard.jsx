@@ -15,26 +15,31 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
-  Navigation
+  Navigation,
+  Sparkles,
+  Zap,
+  Activity,
+  Bed,
+  CheckCheck
 } from "lucide-react";
 import EmergencyMap from "../components/EmergencyMap";
 import { useToast } from "../context/ToastContext";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 export default function DispatcherDashboard() {
   const toast = useToast();
   const [emergencies, setEmergencies] = useState([]);
   const [selectedEmergency, setSelectedEmergency] = useState(null);
-  const [nearbyHospitals, setNearbyHospitals] = useState([]);
-  const [availableAmbulances, setAvailableAmbulances] = useState([]);
+  const [hospitalRecs, setHospitalRecs] = useState([]);
+  const [ambulanceRecs, setAmbulanceRecs] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [assigningHospitalId, setAssigningHospitalId] = useState(null);
   const [assigningAmbulanceId, setAssigningAmbulanceId] = useState(null);
+  const [autoDispatching, setAutoDispatching] = useState(false);
 
-  // Fetch all emergencies
+  // 1. Fetch all emergencies
   const fetchAllEmergencies = useCallback(async () => {
     try {
       setLoading(true);
@@ -44,7 +49,6 @@ export default function DispatcherDashboard() {
       });
       setEmergencies(res.data);
 
-      // Keep selected incident updated
       if (selectedEmergency) {
         const updated = res.data.find((e) => e._id === selectedEmergency._id);
         if (updated) setSelectedEmergency(updated);
@@ -58,32 +62,22 @@ export default function DispatcherDashboard() {
     }
   }, [toast, selectedEmergency]);
 
-  // Fetch nearby hospitals for selected emergency
-  const fetchNearbyHospitals = useCallback(async (emergencyId) => {
+  // 2. Fetch AI Recommendations for Hospital & Ambulance
+  const fetchAIRecommendations = useCallback(async (emergencyId) => {
     if (!emergencyId) return;
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${API_BASE}/hospitals/nearby/${emergencyId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setNearbyHospitals(res.data);
-    } catch (err) {
-      console.warn("Nearby hospitals warning:", err.message);
-      setNearbyHospitals([]);
-    }
-  }, []);
+      const headers = { Authorization: `Bearer ${token}` };
 
-  // Fetch available ambulances
-  const fetchAvailableAmbulances = useCallback(async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`${API_BASE}/ambulances?status=Available`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAvailableAmbulances(res.data);
+      const [hospRes, ambRes] = await Promise.all([
+        axios.get(`${API_BASE}/ai/recommend-hospital/${emergencyId}`, { headers }),
+        axios.get(`${API_BASE}/ai/recommend-ambulance/${emergencyId}`, { headers })
+      ]);
+
+      setHospitalRecs(hospRes.data.recommendations || []);
+      setAmbulanceRecs(ambRes.data.recommendations || []);
     } catch (err) {
-      console.warn("Ambulances fetch error:", err.message);
-      setAvailableAmbulances([]);
+      console.warn("AI recommendations fetch error:", err.message);
     }
   }, []);
 
@@ -93,12 +87,33 @@ export default function DispatcherDashboard() {
 
   useEffect(() => {
     if (selectedEmergency) {
-      fetchNearbyHospitals(selectedEmergency._id);
-      fetchAvailableAmbulances();
+      fetchAIRecommendations(selectedEmergency._id);
     }
-  }, [selectedEmergency?._id, fetchNearbyHospitals, fetchAvailableAmbulances]);
+  }, [selectedEmergency?._id, fetchAIRecommendations]);
 
-  // Assign Hospital
+  // 3. One-Click AI Autonomous Dispatch Action
+  const handleAutoDispatch = async () => {
+    if (!selectedEmergency) return;
+    try {
+      setAutoDispatching(true);
+      const token = localStorage.getItem("token");
+      const res = await axios.post(
+        `${API_BASE}/ai/auto-dispatch/${selectedEmergency._id}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success(res.data.message || "AI Auto-Dispatch successful!");
+      fetchAllEmergencies();
+      fetchAIRecommendations(selectedEmergency._id);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "AI auto-dispatch failed");
+    } finally {
+      setAutoDispatching(false);
+    }
+  };
+
+  // Assign Hospital manually
   const handleAssignHospital = async (hospital) => {
     if (!selectedEmergency) return;
     try {
@@ -112,6 +127,7 @@ export default function DispatcherDashboard() {
       setSelectedEmergency(res.data.emergency);
       toast.success(`Assigned ${hospital.name} to this incident`);
       fetchAllEmergencies();
+      fetchAIRecommendations(selectedEmergency._id);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to assign hospital");
     } finally {
@@ -119,20 +135,20 @@ export default function DispatcherDashboard() {
     }
   };
 
-  // Assign Ambulance
+  // Assign Ambulance manually
   const handleAssignAmbulance = async (ambulance) => {
     if (!selectedEmergency) return;
     try {
       setAssigningAmbulanceId(ambulance._id);
       const token = localStorage.getItem("token");
-      const res = await axios.patch(
+      await axios.patch(
         `${API_BASE}/ambulances/${ambulance._id}/assign`,
         { emergencyId: selectedEmergency._id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success(`Dispatched ambulance ${ambulance.vehicleNumber}! Status set to Responding.`);
       fetchAllEmergencies();
-      fetchAvailableAmbulances();
+      fetchAIRecommendations(selectedEmergency._id);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to dispatch ambulance");
     } finally {
@@ -152,12 +168,12 @@ export default function DispatcherDashboard() {
       );
       setSelectedEmergency(res.data.emergency);
       if (newStatus === "Resolved") {
-        toast.success("Incident resolved. Assigned ambulance automatically set to Available!");
+        toast.success("Incident marked Resolved. Assigned ambulance automatically freed.");
       } else {
         toast.success(`Incident status updated to ${newStatus}`);
       }
       fetchAllEmergencies();
-      fetchAvailableAmbulances();
+      fetchAIRecommendations(selectedEmergency._id);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to update incident status");
     }
@@ -175,7 +191,7 @@ export default function DispatcherDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* Top Command Header & KPI strip */}
+      {/* Top Command Header */}
       <div
         style={{
           display: "flex",
@@ -183,31 +199,46 @@ export default function DispatcherDashboard() {
           alignItems: "center",
           flexWrap: "wrap",
           gap: "16px",
-          background: "var(--bg-card)",
+          background: "linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(17, 24, 39, 0.95) 100%)",
           padding: "20px 28px",
           borderRadius: "16px",
-          border: "1px solid var(--border-color)"
+          border: "1px solid rgba(14, 165, 233, 0.3)"
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Radio size={24} color="#38BDF8" />
-            <h1 style={{ fontSize: "1.5rem" }}>Dispatcher Incident Command Center</h1>
-            <span className="pulse-beacon" />
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "12px",
+              background: "linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 0 16px rgba(14, 165, 233, 0.4)"
+            }}
+          >
+            <Radio size={26} color="#FFFFFF" />
           </div>
-          <p style={{ fontSize: "0.875rem", marginTop: "4px" }}>
-            Triage incoming emergency alerts, assign nearest medical centers, and deploy available ambulances.
-          </p>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <h1 style={{ fontSize: "1.5rem" }}>Dispatcher Incident Command Center</h1>
+              <span className="pulse-beacon" />
+            </div>
+            <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginTop: "2px" }}>
+              AI-assisted multi-criteria triage, nearest acute trauma matching, and 1-click autonomous dispatch.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={fetchAllEmergencies} className="btn btn-outline btn-sm" disabled={loading}>
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh Feed
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh Feed
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Left Triage List (400px), Right Action Console */}
+      {/* Main Grid: Queue (380px) + Action Console */}
       <div
         style={{
           display: "grid",
@@ -218,14 +249,14 @@ export default function DispatcherDashboard() {
       >
         {/* LEFT COLUMN: Incidents Queue */}
         <div className="card" style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Search & Filter Bar */}
+          {/* Search Bar */}
           <div style={{ position: "relative" }}>
             <Search size={16} color="var(--text-dim)" style={{ position: "absolute", left: "12px", top: "12px" }} />
             <input
               type="text"
               className="form-input"
               style={{ paddingLeft: "36px", fontSize: "0.85rem" }}
-              placeholder="Search type, description, citizen..."
+              placeholder="Search category, keyword, citizen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -262,7 +293,7 @@ export default function DispatcherDashboard() {
             ))}
           </div>
 
-          {/* Incidents List */}
+          {/* List */}
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "680px", overflowY: "auto" }}>
             {filteredEmergencies.length === 0 ? (
               <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-dim)" }}>
@@ -282,7 +313,7 @@ export default function DispatcherDashboard() {
                     style={{
                       padding: "14px",
                       borderRadius: "10px",
-                      background: isSelected ? "rgba(99, 102, 241, 0.15)" : "var(--bg-input)",
+                      background: isSelected ? "rgba(99, 102, 241, 0.18)" : "var(--bg-input)",
                       border: `1px solid ${isSelected ? "var(--color-primary)" : "var(--border-color)"}`,
                       cursor: "pointer",
                       transition: "all 0.15s"
@@ -290,10 +321,7 @@ export default function DispatcherDashboard() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span
-                          className={`severity-dot severity-${em.severity.toLowerCase()}`}
-                          title={`Severity: ${em.severity}`}
-                        />
+                        <span className={`severity-dot severity-${em.severity.toLowerCase()}`} />
                         <strong style={{ fontSize: "0.95rem", color: "#FFFFFF" }}>{em.type}</strong>
                       </div>
                       <span className={`badge ${badgeClass}`}>{em.status}</span>
@@ -304,7 +332,7 @@ export default function DispatcherDashboard() {
                     </p>
 
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.725rem", color: "var(--text-dim)" }}>
-                      <span>{em.userId?.name || "Anonymous Citizen"}</span>
+                      <span>{em.userId?.name || "Bystander"}</span>
                       <span>{new Date(em.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
@@ -322,9 +350,7 @@ export default function DispatcherDashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "16px" }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                    <span
-                      className={`severity-dot severity-${selectedEmergency.severity.toLowerCase()}`}
-                    />
+                    <span className={`severity-dot severity-${selectedEmergency.severity.toLowerCase()}`} />
                     <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase" }}>
                       INCIDENT REF: #{selectedEmergency._id.slice(-6)}
                     </span>
@@ -345,37 +371,81 @@ export default function DispatcherDashboard() {
                   <p style={{ fontSize: "0.925rem", marginTop: "4px" }}>{selectedEmergency.description}</p>
                 </div>
 
-                {/* Status Transition Control Buttons */}
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* Actions & 1-Click AI Auto Dispatch Button */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  {selectedEmergency.status !== "Resolved" && (
+                    <button
+                      onClick={handleAutoDispatch}
+                      disabled={autoDispatching}
+                      className="btn btn-emergency btn-sm"
+                      style={{
+                        background: "linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)",
+                        boxShadow: "0 0 20px rgba(99, 102, 241, 0.5)",
+                        fontWeight: 800
+                      }}
+                      title="AI evaluates all hospitals and fleet to dispatch the best pair instantly"
+                    >
+                      <Zap size={16} color="#FBBF24" />
+                      {autoDispatching ? "Computing AI Match..." : "⚡ AI 1-Click Auto-Dispatch"}
+                    </button>
+                  )}
+
                   {selectedEmergency.status === "Active" && (
                     <button
                       onClick={() => handleUpdateStatus("Responding")}
                       className="btn btn-warning btn-sm"
                       style={{ background: "#D97706", color: "#FFF" }}
                     >
-                      <Radio size={16} /> Mark Responding
+                      Mark Responding
                     </button>
                   )}
 
                   {selectedEmergency.status !== "Resolved" ? (
-                    <button
-                      onClick={() => handleUpdateStatus("Resolved")}
-                      className="btn btn-success btn-sm"
-                    >
-                      <CheckCircle2 size={16} /> Mark Resolved & Free Ambulance
+                    <button onClick={() => handleUpdateStatus("Resolved")} className="btn btn-success btn-sm">
+                      <CheckCircle2 size={16} /> Mark Resolved & Free Unit
                     </button>
                   ) : (
-                    <button
-                      onClick={() => handleUpdateStatus("Active")}
-                      className="btn btn-outline btn-sm"
-                    >
+                    <button onClick={() => handleUpdateStatus("Active")} className="btn btn-outline btn-sm">
                       Re-open Incident
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Coordinates & Citizen Info Bar */}
+              {/* AI Clinical Triage Insight Banner */}
+              {selectedEmergency.aiTriage && (
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    background: "rgba(99, 102, 241, 0.12)",
+                    border: "1px solid rgba(99, 102, 241, 0.35)",
+                    borderRadius: "10px",
+                    marginBottom: "16px",
+                    fontSize: "0.85rem"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, color: "#818CF8" }}>
+                      <Sparkles size={16} /> AI Triage Assessment: {selectedEmergency.aiTriage.detectedCondition}
+                    </div>
+                    <span style={{ fontWeight: 800, color: selectedEmergency.aiTriage.badgeColor }}>
+                      {selectedEmergency.aiTriage.triageCode} (Score: {selectedEmergency.aiTriage.triageScore}/100)
+                    </span>
+                  </div>
+                  <div style={{ color: "var(--text-muted)" }}>{selectedEmergency.aiTriage.primaryRisk}</div>
+                  {selectedEmergency.aiTriage.clinicalFlags?.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                      {selectedEmergency.aiTriage.clinicalFlags.map((flag, idx) => (
+                        <span key={idx} style={{ fontSize: "0.725rem", padding: "2px 8px", background: "rgba(239, 68, 68, 0.15)", color: "#F87171", borderRadius: "4px" }}>
+                          ⚠ {flag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Coordinates Info Bar */}
               <div
                 style={{
                   display: "flex",
@@ -394,7 +464,7 @@ export default function DispatcherDashboard() {
                 </div>
                 {selectedEmergency.userId?.name && (
                   <div>
-                    <strong style={{ color: "#FFFFFF" }}>Reported By:</strong> {selectedEmergency.userId.name}
+                    <strong style={{ color: "#FFFFFF" }}>Caller:</strong> {selectedEmergency.userId.name}
                   </div>
                 )}
                 <div>
@@ -403,14 +473,14 @@ export default function DispatcherDashboard() {
               </div>
             </div>
 
-            {/* Live Interactive Map with Polyline Route */}
+            {/* Tactical Live Map */}
             <div className="card" style={{ padding: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                 <h3 className="card-title" style={{ fontSize: "1.05rem" }}>
-                  <Navigation size={18} color="#38BDF8" /> Live Tactical Route
+                  <Navigation size={18} color="#38BDF8" /> Tactical Route & Proximity Radar
                 </h3>
                 <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>
-                  {selectedEmergency.hospitalId ? "Route Calculated from Hospital to Incident" : "Assign hospital to calculate route"}
+                  {selectedEmergency.hospitalId ? "Route Hospital ➔ Incident Active" : "Assign hospital to calculate route"}
                 </span>
               </div>
 
@@ -423,57 +493,71 @@ export default function DispatcherDashboard() {
               />
             </div>
 
-            {/* Dispatcher Actions Grid: Nearby Hospitals (Left) + Available Ambulances (Right) */}
+            {/* Dispatcher Actions Grid: AI Recommended Hospitals (Left) + AI Ambulances (Right) */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-              {/* Nearby Hospitals Panel */}
+              {/* AI Ranked Hospitals Panel */}
               <div className="card">
                 <div className="card-header" style={{ marginBottom: "14px" }}>
                   <h3 className="card-title" style={{ fontSize: "1.05rem" }}>
-                    <Building2 size={18} color="#38BDF8" /> Nearby Hospitals ({nearbyHospitals.length})
+                    <Building2 size={18} color="#0EA5E9" /> AI-Ranked Hospitals ({hospitalRecs.length})
                   </h3>
+                  <span style={{ fontSize: "0.75rem", color: "#818CF8", display: "flex", alignItems: "center", gap: "4px", fontWeight: 700 }}>
+                    <Sparkles size={12} /> MCDA Optimization
+                  </span>
                 </div>
 
-                {nearbyHospitals.length === 0 ? (
+                {hospitalRecs.length === 0 ? (
                   <div style={{ fontSize: "0.85rem", color: "var(--text-dim)", padding: "16px", textAlign: "center" }}>
                     No hospitals found within search radius.
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "300px", overflowY: "auto" }}>
-                    {nearbyHospitals.map((hosp) => {
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "380px", overflowY: "auto" }}>
+                    {hospitalRecs.map((rec) => {
+                      const hosp = rec.hospital;
                       const isAssigned = selectedEmergency.hospitalId?._id === hosp._id;
                       return (
                         <div
                           key={hosp._id}
                           style={{
                             padding: "12px 14px",
-                            borderRadius: "8px",
+                            borderRadius: "10px",
                             background: isAssigned ? "rgba(14, 165, 233, 0.15)" : "var(--bg-input)",
-                            border: `1px solid ${isAssigned ? "#0EA5E9" : "var(--border-color)"}`,
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center"
+                            border: `1px solid ${isAssigned ? "#0EA5E9" : "var(--border-color)"}`
                           }}
                         >
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#FFFFFF" }}>{hosp.name}</div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                              {hosp.address?.city} • Beds: {hosp.availableBeds}/{hosp.totalBeds} • ICU: {hosp.availableIcuBeds}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#FFFFFF" }}>{hosp.name}</div>
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                {rec.distanceKm} km away • {rec.etaMinutes} min ETA • Beds: {hosp.availableBeds}/{hosp.totalBeds} • ICU: {hosp.availableIcuBeds}
+                              </div>
                             </div>
+
+                            <span
+                              style={{
+                                padding: "2px 8px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: 800,
+                                background: rec.matchScore >= 80 ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                                color: rec.matchScore >= 80 ? "#34D399" : "#FBBF24"
+                              }}
+                            >
+                              {rec.matchScore}% Match
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: "0.775rem", color: "var(--text-dim)", marginBottom: "8px", lineHeight: 1.4 }}>
+                            {rec.aiReasoning}
                           </div>
 
                           <button
                             onClick={() => handleAssignHospital(hosp)}
                             disabled={isAssigned || assigningHospitalId === hosp._id}
                             className={`btn btn-sm ${isAssigned ? "btn-success" : "btn-primary"}`}
-                            style={{ minWidth: "110px" }}
+                            style={{ width: "100%" }}
                           >
-                            {isAssigned ? (
-                              <><Check size={14} /> Assigned</>
-                            ) : assigningHospitalId === hosp._id ? (
-                              "Assigning..."
-                            ) : (
-                              "Assign"
-                            )}
+                            {isAssigned ? <><Check size={14} /> Assigned</> : assigningHospitalId === hosp._id ? "Assigning..." : "Assign Hospital"}
                           </button>
                         </div>
                       );
@@ -482,30 +566,33 @@ export default function DispatcherDashboard() {
                 )}
               </div>
 
-              {/* Available Ambulances Panel */}
+              {/* AI Ranked Ambulances Panel */}
               <div className="card">
                 <div className="card-header" style={{ marginBottom: "14px" }}>
                   <h3 className="card-title" style={{ fontSize: "1.05rem" }}>
-                    <Ambulance size={18} color="#F59E0B" /> Available Ambulances ({availableAmbulances.length})
+                    <Ambulance size={18} color="#F59E0B" /> AI Ambulance Fleet Match ({ambulanceRecs.length})
                   </h3>
+                  <span style={{ fontSize: "0.75rem", color: "#FBBF24", display: "flex", alignItems: "center", gap: "4px", fontWeight: 700 }}>
+                    <Sparkles size={12} /> Proximity Scored
+                  </span>
                 </div>
 
-                {/* Show currently assigned ambulance first if any */}
+                {/* Show currently assigned ambulance first */}
                 {selectedEmergency.ambulanceId && (
                   <div
                     style={{
                       padding: "12px 14px",
-                      borderRadius: "8px",
+                      borderRadius: "10px",
                       background: "rgba(245, 158, 11, 0.15)",
                       border: "1px solid #F59E0B",
-                      marginBottom: "10px",
+                      marginBottom: "12px",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center"
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#FFFFFF" }}>
+                      <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#FFFFFF" }}>
                         {selectedEmergency.ambulanceId.vehicleNumber}
                       </div>
                       <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
@@ -516,40 +603,48 @@ export default function DispatcherDashboard() {
                   </div>
                 )}
 
-                {availableAmbulances.length === 0 ? (
+                {ambulanceRecs.length === 0 ? (
                   <div style={{ fontSize: "0.85rem", color: "var(--text-dim)", padding: "16px", textAlign: "center" }}>
-                    No unassigned ambulances available currently.
+                    No ambulances found in system.
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "300px", overflowY: "auto" }}>
-                    {availableAmbulances.map((amb) => {
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "380px", overflowY: "auto" }}>
+                    {ambulanceRecs.map((rec) => {
+                      const amb = rec.ambulance;
+                      const isAssigned = selectedEmergency.ambulanceId?._id === amb._id;
                       return (
                         <div
                           key={amb._id}
                           style={{
                             padding: "12px 14px",
-                            borderRadius: "8px",
-                            background: "var(--bg-input)",
-                            border: "1px solid var(--border-color)",
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center"
+                            borderRadius: "10px",
+                            background: isAssigned ? "rgba(245, 158, 11, 0.15)" : "var(--bg-input)",
+                            border: `1px solid ${isAssigned ? "#F59E0B" : "var(--border-color)"}`
                           }}
                         >
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#FFFFFF" }}>{amb.vehicleNumber}</div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                              Driver: {amb.driverName} • {amb.driverPhone}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#FFFFFF" }}>{amb.vehicleNumber}</div>
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                Driver: {amb.driverName} • {amb.driverPhone}
+                              </div>
                             </div>
+                            <span className={`badge ${rec.isAvailable ? "badge-resolved" : "badge-neutral"}`}>
+                              {amb.status}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: "0.775rem", color: "var(--text-dim)", marginBottom: "8px" }}>
+                            {rec.aiReasoning}
                           </div>
 
                           <button
                             onClick={() => handleAssignAmbulance(amb)}
-                            disabled={assigningAmbulanceId === amb._id}
-                            className="btn btn-sm btn-emergency"
-                            style={{ minWidth: "110px" }}
+                            disabled={isAssigned || assigningAmbulanceId === amb._id}
+                            className={`btn btn-sm ${isAssigned ? "btn-success" : "btn-emergency"}`}
+                            style={{ width: "100%" }}
                           >
-                            {assigningAmbulanceId === amb._id ? "Deploying..." : "Dispatch"}
+                            {isAssigned ? <><Check size={14} /> Dispatched</> : assigningAmbulanceId === amb._id ? "Deploying..." : "Dispatch Ambulance"}
                           </button>
                         </div>
                       );

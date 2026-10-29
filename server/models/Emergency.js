@@ -6,7 +6,7 @@ const emergencySchema = new mongoose.Schema(
       type: String,
       required: true
     },
-    
+
     description: {
       type: String,
       required: true
@@ -34,6 +34,19 @@ const emergencySchema = new mongoose.Schema(
       default: "Active"
     },
 
+    ambulanceStatus: {
+      type: String,
+      enum: [
+        "Pending",
+        "En Route to Scene",
+        "Arrived at Scene",
+        "Transporting to Hospital",
+        "Delivered",
+        null
+      ],
+      default: null
+    },
+
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -41,16 +54,38 @@ const emergencySchema = new mongoose.Schema(
     },
 
     hospitalId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Hospital",
-  default: null
-},
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital",
+      default: null
+    },
 
-ambulanceId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Ambulance",
-  default: null
-}
+    ambulanceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ambulance",
+      default: null
+    },
+
+    patientVitals: {
+      conscious: { type: Boolean, default: true },
+      bleeding: { type: Boolean, default: false },
+      breathingDifficulty: { type: Boolean, default: false },
+      pulse: { type: Number, default: 75 }
+    },
+
+    aiTriage: {
+      type: Object,
+      default: null
+    },
+
+    userCelebrationSeen: {
+      type: Boolean,
+      default: false
+    },
+
+    resolvedAt: {
+      type: Date,
+      default: null
+    }
   },
   {
     timestamps: true

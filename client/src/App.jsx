@@ -5,6 +5,8 @@ import Navbar from "./components/Navbar";
 import Login from "./pages/Login";
 import CitizenDashboard from "./pages/CitizenDashboard";
 import DispatcherDashboard from "./pages/DispatcherDashboard";
+import HospitalDashboard from "./pages/HospitalDashboard";
+import DriverDashboard from "./pages/DriverDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import { ShieldAlert } from "lucide-react";
 
@@ -27,7 +29,7 @@ function MainApp() {
       >
         <div className="pulse-beacon" style={{ width: "24px", height: "24px" }} />
         <div style={{ color: "var(--text-muted)", fontSize: "0.95rem", fontWeight: 600 }}>
-          Initializing QuickPulse Emergency Network...
+          Initializing QuickPulse Emergency AI Network...
         </div>
       </div>
     );
@@ -38,11 +40,20 @@ function MainApp() {
     return <Login />;
   }
 
+  const defaultTab =
+    role === "citizen"
+      ? "report"
+      : role === "hospital"
+      ? "trauma"
+      : role === "driver"
+      ? "mission"
+      : "dispatch";
+
   return (
     <div className="app-layout">
       {/* Universal Top Navigation */}
       <Navbar
-        activeTab={activeTab === "default" ? (role === "citizen" ? "report" : "dispatch") : activeTab}
+        activeTab={activeTab === "default" ? defaultTab : activeTab}
         onSelectTab={(tab) => setActiveTab(tab)}
       />
 
@@ -56,6 +67,14 @@ function MainApp() {
 
         {role === "dispatcher" && (
           <DispatcherDashboard />
+        )}
+
+        {role === "hospital" && (
+          <HospitalDashboard />
+        )}
+
+        {role === "driver" && (
+          <DriverDashboard />
         )}
 
         {role === "admin" && (
@@ -84,12 +103,12 @@ function MainApp() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <ShieldAlert size={16} color="#EF4444" />
-          <span>QuickPulse Critical Incident Management • 24/7 Rapid Response Protocol</span>
+          <span>QuickPulse Critical Incident Management • 24/7 AI-Powered Rapid Response Protocol</span>
         </div>
         <div>
           <span>Connected as </span>
           <strong style={{ color: "var(--text-main)" }}>{user.name}</strong>
-          <span> ({role.toUpperCase()})</span>
+          <span style={{ textTransform: "uppercase", fontWeight: 700, color: "#38BDF8" }}> ({role})</span>
         </div>
       </footer>
     </div>

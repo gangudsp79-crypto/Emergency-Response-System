@@ -10,14 +10,19 @@ import {
   CheckCircle2,
   Clock,
   RefreshCw,
-  Layers
+  Layers,
+  Sparkles,
+  Zap,
+  Stethoscope,
+  Compass
 } from "lucide-react";
 import DispatcherDashboard from "./DispatcherDashboard";
 import HospitalManagement from "./HospitalManagement";
 import AmbulanceManagement from "./AmbulanceManagement";
+import HospitalDashboard from "./HospitalDashboard";
+import DriverDashboard from "./DriverDashboard";
 import { useToast } from "../context/ToastContext";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) {
   const toast = useToast();
@@ -30,6 +35,8 @@ export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) 
     totalHospitals: 0,
     totalBeds: 0,
     availableBeds: 0,
+    totalIcuBeds: 0,
+    availableIcuBeds: 0,
     totalAmbulances: 0,
     availableAmbulances: 0
   });
@@ -68,6 +75,8 @@ export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) 
         totalHospitals: hospitals.length,
         totalBeds: hospitals.reduce((sum, h) => sum + (h.totalBeds || 0), 0),
         availableBeds: hospitals.reduce((sum, h) => sum + (h.availableBeds || 0), 0),
+        totalIcuBeds: hospitals.reduce((sum, h) => sum + (h.totalIcuBeds || 0), 0),
+        availableIcuBeds: hospitals.reduce((sum, h) => sum + (h.availableIcuBeds || 0), 0),
         totalAmbulances: ambulances.length,
         availableAmbulances: ambulances.filter((a) => a.status === "Available").length
       });
@@ -131,7 +140,7 @@ export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) 
         </div>
       </div>
 
-      {/* Tab Navigation Navigation Bar */}
+      {/* Admin Tab Navigation Bar */}
       <div
         style={{
           display: "flex",
@@ -143,24 +152,36 @@ export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) 
           gap: "12px"
         }}
       >
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <button
             onClick={() => handleTabChange("dispatch")}
             className={`btn btn-sm ${currentTab === "dispatch" ? "btn-emergency" : "btn-outline"}`}
           >
-            <Radio size={16} /> Live Dispatch Operations
+            <Radio size={16} /> AI Incident Command
           </button>
           <button
             onClick={() => handleTabChange("hospitals")}
             className={`btn btn-sm ${currentTab === "hospitals" ? "btn-primary" : "btn-outline"}`}
           >
-            <Building2 size={16} /> Hospitals Management
+            <Building2 size={16} /> Hospital Management
           </button>
           <button
             onClick={() => handleTabChange("ambulances")}
             className={`btn btn-sm ${currentTab === "ambulances" ? "btn-primary" : "btn-outline"}`}
           >
             <Ambulance size={16} /> Ambulance Fleet
+          </button>
+          <button
+            onClick={() => handleTabChange("hospital_view")}
+            className={`btn btn-sm ${currentTab === "hospital_view" ? "btn-primary" : "btn-outline"}`}
+          >
+            <Stethoscope size={16} /> Hospital Staff Console
+          </button>
+          <button
+            onClick={() => handleTabChange("driver_view")}
+            className={`btn btn-sm ${currentTab === "driver_view" ? "btn-primary" : "btn-outline"}`}
+          >
+            <Compass size={16} /> Paramedic Driver View
           </button>
         </div>
 
@@ -173,6 +194,8 @@ export default function AdminDashboard({ activeTab = "dispatch", onSelectTab }) 
       {currentTab === "dispatch" && <DispatcherDashboard />}
       {currentTab === "hospitals" && <HospitalManagement />}
       {currentTab === "ambulances" && <AmbulanceManagement />}
+      {currentTab === "hospital_view" && <HospitalDashboard />}
+      {currentTab === "driver_view" && <DriverDashboard />}
     </div>
   );
 }

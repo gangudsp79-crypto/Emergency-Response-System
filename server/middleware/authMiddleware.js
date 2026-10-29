@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const { getModel } = require("../services/dbStore");
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -15,9 +15,10 @@ const authMiddleware = async (req, res, next) => {
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET || "default_emergency_jwt_secret"
     );
 
+    const User = getModel("User");
     const user = await User.findById(decoded.userId);
 
     if (!user) {
@@ -28,11 +29,12 @@ const authMiddleware = async (req, res, next) => {
 
     req.userId = user._id;
     req.userRole = user.role;
+    req.user = user;
 
     next();
 
   } catch (error) {
-    console.error("Auth error:", error);
+    console.error("Auth error:", error.message);
 
     res.status(401).json({
       message: "Invalid or expired token"

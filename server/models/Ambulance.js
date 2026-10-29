@@ -18,6 +18,28 @@ const ambulanceSchema = new mongoose.Schema(
       default: ""
     },
 
+    driverLicense: {
+      type: String,
+      default: ""
+    },
+
+    driverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+
+    vehicleType: {
+      type: String,
+      enum: ["ALS", "BLS"],
+      default: "ALS"
+    },
+
+    baseArea: {
+      type: String,
+      default: "Mysuru"
+    },
+
     status: {
       type: String,
       enum: [
@@ -29,10 +51,10 @@ const ambulanceSchema = new mongoose.Schema(
     },
 
     emergencyId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Emergency",
-  default: null
-},
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Emergency",
+      default: null
+    },
 
     currentLocation: {
       type: {
@@ -43,7 +65,7 @@ const ambulanceSchema = new mongoose.Schema(
 
       coordinates: {
         type: [Number],
-        default: [0, 0]
+        default: [76.6450, 12.3020]
       }
     }
   },

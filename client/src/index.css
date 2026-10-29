@@ -438,3 +438,44 @@ p {
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/* Medical Clinical Accents & Hospital Theme */
+.badge-code-red {
+  background: rgba(239, 68, 68, 0.2);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+.badge-code-yellow {
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.badge-code-green {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+/* Animated EKG pulse effect */
+@keyframes ekg-beat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.18); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.14); }
+  70% { transform: scale(1); }
+}
+
+.animate-heartbeat {
+  animation: ekg-beat 1.4s ease-in-out infinite;
+}
+
+/* Glassmorphism for Tactical Map Overlays */
+.tactical-glass {
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+

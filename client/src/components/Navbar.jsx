@@ -9,7 +9,9 @@ import {
   User,
   ShieldCheck,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Stethoscope,
+  Compass
 } from "lucide-react";
 
 export default function Navbar({ activeTab, onSelectTab }) {
@@ -27,8 +29,12 @@ export default function Navbar({ activeTab, onSelectTab }) {
         return { background: "rgba(168, 85, 247, 0.15)", color: "#C084FC", border: "1px solid rgba(168, 85, 247, 0.3)" };
       case "dispatcher":
         return { background: "rgba(14, 165, 233, 0.15)", color: "#38BDF8", border: "1px solid rgba(14, 165, 233, 0.3)" };
-      default:
+      case "hospital":
         return { background: "rgba(16, 185, 129, 0.15)", color: "#34D399", border: "1px solid rgba(16, 185, 129, 0.3)" };
+      case "driver":
+        return { background: "rgba(245, 158, 11, 0.15)", color: "#FBBF24", border: "1px solid rgba(245, 158, 11, 0.3)" };
+      default:
+        return { background: "rgba(239, 68, 68, 0.15)", color: "#F87171", border: "1px solid rgba(239, 68, 68, 0.3)" };
     }
   };
 
@@ -52,7 +58,7 @@ export default function Navbar({ activeTab, onSelectTab }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: "20px"
+          gap: "16px"
         }}
       >
         {/* Brand / Logo */}
@@ -74,17 +80,17 @@ export default function Navbar({ activeTab, onSelectTab }) {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "1.15rem", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em" }}>
-                QuickPulse
+                QuickPulse AI
               </span>
               <span className="pulse-beacon" title="Live Emergency Network Active" />
             </div>
-            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500 }}>
-              Emergency Operations Center
+            <div style={{ fontSize: "0.725rem", color: "var(--text-muted)", fontWeight: 500 }}>
+              Hospital & Emergency Dispatch Ops
             </div>
           </div>
         </div>
 
-        {/* Navigation Tabs based on Role */}
+        {/* Navigation Tabs based on Active Role */}
         <nav style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {role === "citizen" && (
             <>
@@ -92,7 +98,7 @@ export default function Navbar({ activeTab, onSelectTab }) {
                 className={`btn btn-sm ${activeTab === "report" ? "btn-emergency" : "btn-outline"}`}
                 onClick={() => onSelectTab("report")}
               >
-                <ShieldAlert size={16} /> Report Emergency
+                <ShieldAlert size={16} /> Report SOS
               </button>
               <button
                 className={`btn btn-sm ${activeTab === "history" ? "btn-primary" : "btn-outline"}`}
@@ -109,7 +115,30 @@ export default function Navbar({ activeTab, onSelectTab }) {
                 className={`btn btn-sm ${activeTab === "dispatch" ? "btn-emergency" : "btn-outline"}`}
                 onClick={() => onSelectTab("dispatch")}
               >
-                <Radio size={16} /> Incident Command
+                <Radio size={16} /> AI Incident Command
+              </button>
+            </>
+          )}
+
+          {role === "hospital" && (
+            <>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => onSelectTab("trauma")}
+              >
+                <Stethoscope size={16} /> Hospital Trauma Center
+              </button>
+            </>
+          )}
+
+          {role === "driver" && (
+            <>
+              <button
+                className="btn btn-sm btn-warning"
+                onClick={() => onSelectTab("mission")}
+                style={{ background: "#D97706", color: "#FFF" }}
+              >
+                <Compass size={16} /> Paramedic Navigation
               </button>
             </>
           )}
@@ -139,8 +168,8 @@ export default function Navbar({ activeTab, onSelectTab }) {
         </nav>
 
         {/* Right Section: Role Quick-Switcher, User Profile & Logout */}
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          {/* Persona Switcher for smooth testing */}
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          {/* Universal Persona Switcher for effortless evaluation */}
           <div
             style={{
               display: "flex",
@@ -149,58 +178,41 @@ export default function Navbar({ activeTab, onSelectTab }) {
               borderRadius: "8px",
               padding: "4px",
               border: "1px solid var(--border-color)",
-              gap: "4px"
+              gap: "2px"
             }}
-            title="Fast switch persona for end-to-end testing"
+            title="Fast switch persona to test all dashboards"
           >
-            <span style={{ fontSize: "0.725rem", color: "var(--text-dim)", padding: "0 6px", fontWeight: 600 }}>
+            <span style={{ fontSize: "0.7rem", color: "var(--text-dim)", padding: "0 4px", fontWeight: 700 }}>
               TEST ROLE:
             </span>
-            <button
-              onClick={() => handleRoleSwitch("citizen")}
-              style={{
-                background: role === "citizen" ? "rgba(16, 185, 129, 0.2)" : "transparent",
-                color: role === "citizen" ? "#34D399" : "var(--text-muted)",
-                border: "none",
-                borderRadius: "4px",
-                padding: "4px 8px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              Citizen
-            </button>
-            <button
-              onClick={() => handleRoleSwitch("dispatcher")}
-              style={{
-                background: role === "dispatcher" ? "rgba(14, 165, 233, 0.2)" : "transparent",
-                color: role === "dispatcher" ? "#38BDF8" : "var(--text-muted)",
-                border: "none",
-                borderRadius: "4px",
-                padding: "4px 8px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              Dispatcher
-            </button>
-            <button
-              onClick={() => handleRoleSwitch("admin")}
-              style={{
-                background: role === "admin" ? "rgba(168, 85, 247, 0.2)" : "transparent",
-                color: role === "admin" ? "#C084FC" : "var(--text-muted)",
-                border: "none",
-                borderRadius: "4px",
-                padding: "4px 8px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              Admin
-            </button>
+            {[
+              { id: "citizen", label: "Citizen" },
+              { id: "dispatcher", label: "Dispatcher" },
+              { id: "hospital", label: "Hospital" },
+              { id: "driver", label: "Paramedic" },
+              { id: "admin", label: "Admin" }
+            ].map((p) => {
+              const isActive = role === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleRoleSwitch(p.id)}
+                  style={{
+                    background: isActive ? "rgba(99, 102, 241, 0.3)" : "transparent",
+                    color: isActive ? "#FFFFFF" : "var(--text-muted)",
+                    border: `1px solid ${isActive ? "#6366F1" : "transparent"}`,
+                    borderRadius: "4px",
+                    padding: "3px 7px",
+                    fontSize: "0.725rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.15s"
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* User Badge */}
@@ -216,30 +228,22 @@ export default function Navbar({ activeTab, onSelectTab }) {
                 borderRadius: "10px"
               }}
             >
-              {user.profilePicture ? (
-                <img
-                  src={user.profilePicture}
-                  alt={user.name}
-                  style={{ width: "28px", height: "28px", borderRadius: "50%" }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "28px",
-                    height: "28px",
-                    borderRadius: "50%",
-                    background: "var(--color-primary)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    color: "#FFFFFF"
-                  }}
-                >
-                  {user.name?.charAt(0) || "U"}
-                </div>
-              )}
+              <div
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "var(--color-primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  color: "#FFFFFF"
+                }}
+              >
+                {user.name?.charAt(0) || "U"}
+              </div>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-main)", lineHeight: 1.2 }}>
                   {user.name}

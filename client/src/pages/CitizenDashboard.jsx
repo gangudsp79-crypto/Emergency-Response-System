@@ -5,7 +5,6 @@ import {
   Flame,
   Car,
   HeartPulse,
-  UserCheck,
   AlertTriangle,
   Clock,
   Building2,
@@ -14,12 +13,17 @@ import {
   CheckCircle2,
   MapPin,
   RefreshCw,
-  Send
+  Send,
+  Compass,
+  Sparkles,
+  HeartHandshake,
+  Activity,
+  ArrowRight,
+  LifeBuoy
 } from "lucide-react";
 import EmergencyMap from "../components/EmergencyMap";
 import { useToast } from "../context/ToastContext";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 const EMERGENCY_TYPES = [
   { id: "Accident", label: "Road Accident", icon: Car, color: "#F97316" },
@@ -42,8 +46,13 @@ export default function CitizenDashboard({ activeTab = "report" }) {
     type: "Accident",
     description: "",
     severity: "High",
-    latitude: 12.2958,
-    longitude: 76.6394
+    latitude: 12.2965,
+    longitude: 76.6342,
+    patientVitals: {
+      conscious: true,
+      bleeding: false,
+      breathingDifficulty: false
+    }
   });
 
   const [formErrors, setFormErrors] = useState({});
@@ -51,6 +60,7 @@ export default function CitizenDashboard({ activeTab = "report" }) {
   const [myEmergencies, setMyEmergencies] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [firstAidGuide, setFirstAidGuide] = useState(null);
 
   // Fetch citizen's emergency incidents
   const fetchMyEmergencies = useCallback(async () => {
@@ -63,6 +73,9 @@ export default function CitizenDashboard({ activeTab = "report" }) {
       setMyEmergencies(res.data);
       if (res.data.length > 0 && !selectedIncident) {
         setSelectedIncident(res.data[0]);
+      } else if (selectedIncident) {
+        const updated = res.data.find((e) => e._id === selectedIncident._id);
+        if (updated) setSelectedIncident(updated);
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to fetch incidents");
@@ -74,6 +87,40 @@ export default function CitizenDashboard({ activeTab = "report" }) {
   useEffect(() => {
     fetchMyEmergencies();
   }, [fetchMyEmergencies]);
+
+  // Fetch AI First-Aid guidance when incident selected
+  useEffect(() => {
+    if (!selectedIncident) return;
+    const fetchGuide = async () => {
+      try {
+        const res = await axios.post(`${API_BASE}/ai/first-aid`, {
+          emergencyType: selectedIncident.type,
+          description: selectedIncident.description
+        });
+        setFirstAidGuide(res.data.guide);
+      } catch (err) {
+        console.warn("First aid guide fetch error:", err.message);
+      }
+    };
+    fetchGuide();
+  }, [selectedIncident?.type, selectedIncident?.description]);
+
+  // Find if any resolved emergency has not had celebration acknowledged
+  const celebrationIncident = myEmergencies.find(
+    (em) => em.status === "Resolved" && !em.userCelebrationSeen
+  );
+
+  const handleAcknowledgeCelebration = async (incidentId) => {
+    try {
+      const token = localStorage.getItem("token");
+      await axios.patch(`${API_BASE}/emergencies/${incidentId}/celebration-seen`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchMyEmergencies();
+    } catch (e) {
+      console.warn("Celebration ack failed:", e);
+    }
+  };
 
   // Validation
   const validateForm = () => {
@@ -120,20 +167,22 @@ export default function CitizenDashboard({ activeTab = "report" }) {
           description: formData.description.trim(),
           severity: formData.severity,
           latitude: Number(formData.latitude),
-          longitude: Number(formData.longitude)
+          longitude: Number(formData.longitude),
+          patientVitals: formData.patientVitals
         },
         {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
 
-      toast.success("Emergency incident reported! Dispatchers notified immediately.");
+      toast.success("Emergency SOS transmitted! Dispatchers and AI Triage notified.");
       setFormData({
         type: "Accident",
         description: "",
         severity: "High",
-        latitude: 12.2958,
-        longitude: 76.6394
+        latitude: 12.2965,
+        longitude: 76.6342,
+        patientVitals: { conscious: true, bleeding: false, breathingDifficulty: false }
       });
       setSelectedIncident(res.data.emergency);
       fetchMyEmergencies();
@@ -171,15 +220,35 @@ export default function CitizenDashboard({ activeTab = "report" }) {
           gap: "16px"
         }}
       >
-        <div>
-          <h1 style={{ fontSize: "1.75rem", marginBottom: "6px" }}>Citizen Emergency Portal</h1>
-          <p style={{ fontSize: "0.95rem" }}>
-            Report accidents, medical emergencies, or disasters. Live responders are connected 24/7.
-          </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              width: "52px",
+              height: "52px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 0 20px rgba(239, 68, 68, 0.4)"
+            }}
+          >
+            <ShieldAlert size={28} color="#FFFFFF" />
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <h1 style={{ fontSize: "1.6rem" }}>Citizen Emergency SOS & Rapid Dispatch</h1>
+              <span className="pulse-beacon" title="Emergency Responders Live" />
+            </div>
+            <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginTop: "2px" }}>
+              Transmit instant accident alerts with live GPS, nearest hospital reservation, and AI bystander first-aid.
+            </p>
+          </div>
         </div>
+
         <div style={{ display: "flex", gap: "12px" }}>
           <button onClick={fetchMyEmergencies} className="btn btn-outline btn-sm" disabled={loadingList}>
-            <RefreshCw size={16} className={loadingList ? "animate-spin" : ""} /> Refresh Status
+            <RefreshCw size={16} className={loadingList ? "animate-spin" : ""} /> Refresh Feed
           </button>
         </div>
       </div>
@@ -192,18 +261,18 @@ export default function CitizenDashboard({ activeTab = "report" }) {
           alignItems: "start"
         }}
       >
-        {/* REPORT FORM (shown on report tab or side-by-side) */}
+        {/* REPORT FORM */}
         {activeTab !== "history" && (
           <div className="card">
             <div className="card-header">
               <h2 className="card-title">
-                <ShieldAlert size={22} color="#EF4444" /> Report New Emergency
+                <ShieldAlert size={22} color="#EF4444" /> Transmit Emergency SOS
               </h2>
-              <span className="badge badge-active">Priority 1</span>
+              <span className="badge badge-active">Priority 1 Triage</span>
             </div>
 
             <form onSubmit={handleSubmit}>
-              {/* Type Category Grid */}
+              {/* Category */}
               <div className="form-group">
                 <label className="form-label">Incident Category</label>
                 <div
@@ -244,7 +313,7 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 </div>
               </div>
 
-              {/* Severity Selector */}
+              {/* Severity Level */}
               <div className="form-group">
                 <label className="form-label">Severity Level</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
@@ -280,13 +349,74 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 </div>
               </div>
 
+              {/* Quick Patient Condition Assessment Toggles */}
+              <div
+                style={{
+                  background: "var(--bg-input)",
+                  padding: "14px",
+                  borderRadius: "10px",
+                  marginBottom: "20px",
+                  border: "1px solid var(--border-color)"
+                }}
+              >
+                <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", marginBottom: "8px" }}>
+                  Clinical Vitals Quick Checklist
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.825rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={!formData.patientVitals.conscious}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          patientVitals: { ...formData.patientVitals, conscious: !e.target.checked }
+                        })
+                      }
+                      style={{ accentColor: "#EF4444" }}
+                    />
+                    <span>Unconscious</span>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.825rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.patientVitals.bleeding}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          patientVitals: { ...formData.patientVitals, bleeding: e.target.checked }
+                        })
+                      }
+                      style={{ accentColor: "#EF4444" }}
+                    />
+                    <span>Heavy Bleeding</span>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.825rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.patientVitals.breathingDifficulty}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          patientVitals: { ...formData.patientVitals, breathingDifficulty: e.target.checked }
+                        })
+                      }
+                      style={{ accentColor: "#EF4444" }}
+                    />
+                    <span>Choking / Gasping</span>
+                  </label>
+                </div>
+              </div>
+
               {/* Description */}
               <div className="form-group">
-                <label className="form-label">Incident Description</label>
+                <label className="form-label">Incident Description & Casualties</label>
                 <textarea
                   className="form-textarea"
                   rows={3}
-                  placeholder="Provide critical details (e.g. 2 vehicles involved, 1 unconscious passenger, near Metro station)"
+                  placeholder="e.g. Head-on motorcycle collision, 1 unconscious rider bleeding from leg, near City Gate."
                   value={formData.description}
                   onChange={(e) => {
                     setFormData({ ...formData, description: e.target.value });
@@ -296,9 +426,9 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 {formErrors.description && <div className="form-error">{formErrors.description}</div>}
               </div>
 
-              {/* Interactive Location Map Picker */}
+              {/* Interactive Location Picker */}
               <div className="form-group">
-                <label className="form-label">Incident Location (Click map or use GPS)</label>
+                <label className="form-label">Victim Location (Pinpoint on map or use GPS)</label>
                 <EmergencyMap
                   interactive={true}
                   selectedLocation={{ latitude: formData.latitude, longitude: formData.longitude }}
@@ -340,18 +470,18 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 style={{ width: "100%", marginTop: "10px" }}
               >
                 <Send size={18} />
-                {isSubmitting ? "Transmitting Emergency..." : "TRANSMIT EMERGENCY ALERT"}
+                {isSubmitting ? "Transmitting to 24/7 Network..." : "TRANSMIT EMERGENCY SOS"}
               </button>
             </form>
           </div>
         )}
 
-        {/* LIVE STATUS & INCIDENTS TRACKER */}
+        {/* LIVE TRACKER & INCIDENT QUEUE */}
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <div className="card">
             <div className="card-header">
               <h2 className="card-title">
-                <Clock size={20} color="#38BDF8" /> My Reported Incidents ({myEmergencies.length})
+                <Clock size={20} color="#38BDF8" /> My Emergency History ({myEmergencies.length})
               </h2>
             </div>
 
@@ -360,11 +490,11 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 <CheckCircle2 size={44} color="#10B981" style={{ margin: "0 auto 12px" }} />
                 <h3 style={{ fontSize: "1.1rem", marginBottom: "6px" }}>No Active Incidents</h3>
                 <p style={{ fontSize: "0.875rem" }}>
-                  You currently have no emergency reports filed. Use the form to report an incident anytime.
+                  You currently have no emergency reports filed. Use the SOS form to transmit an incident anytime.
                 </p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "420px", overflowY: "auto" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "320px", overflowY: "auto" }}>
                 {myEmergencies.map((em) => {
                   const isSelected = selectedIncident?._id === em._id;
                   return (
@@ -372,21 +502,21 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                       key={em._id}
                       onClick={() => setSelectedIncident(em)}
                       style={{
-                        padding: "16px",
+                        padding: "14px",
                         borderRadius: "10px",
-                        background: isSelected ? "rgba(31, 41, 55, 0.8)" : "var(--bg-input)",
+                        background: isSelected ? "rgba(99, 102, 241, 0.18)" : "var(--bg-input)",
                         border: `1px solid ${isSelected ? "var(--color-primary)" : "var(--border-color)"}`,
                         cursor: "pointer",
-                        transition: "all 0.2s"
+                        transition: "all 0.15s"
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                         <div>
-                          <strong style={{ fontSize: "1rem", color: "#FFFFFF" }}>{em.type}</strong>
+                          <strong style={{ fontSize: "0.95rem", color: "#FFFFFF" }}>{em.type}</strong>
                           <span
                             style={{
-                              marginLeft: "10px",
-                              fontSize: "0.75rem",
+                              marginLeft: "8px",
+                              fontSize: "0.725rem",
                               fontWeight: 700,
                               color: em.severity === "Critical" ? "#F87171" : "#FBBF24"
                             }}
@@ -397,11 +527,11 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                         {getStatusBadge(em.status)}
                       </div>
 
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "8px", lineClamp: 2 }}>
+                      <p style={{ fontSize: "0.825rem", color: "var(--text-muted)", marginBottom: "6px", lineClamp: 1 }}>
                         {em.description}
                       </p>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--text-dim)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.725rem", color: "var(--text-dim)" }}>
                         <span>Loc: {em.latitude?.toFixed(4)}, {em.longitude?.toFixed(4)}</span>
                         <span>{new Date(em.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
@@ -412,9 +542,9 @@ export default function CitizenDashboard({ activeTab = "report" }) {
             )}
           </div>
 
-          {/* Incident Live Tracking Details Card */}
+          {/* LIVE TRACKER DETAILS CARD */}
           {selectedIncident && (
-            <div className="card" style={{ border: "1px solid rgba(14, 165, 233, 0.3)" }}>
+            <div className="card" style={{ border: "1px solid rgba(14, 165, 233, 0.4)" }}>
               <div className="card-header">
                 <div>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", textTransform: "uppercase", fontWeight: 700 }}>
@@ -427,98 +557,206 @@ export default function CitizenDashboard({ activeTab = "report" }) {
                 {getStatusBadge(selectedIncident.status)}
               </div>
 
-              {/* Status Banner */}
+              {/* Multi-Stage Visual Stepper */}
               <div
                 style={{
-                  padding: "14px 18px",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, 1fr)",
+                  gap: "6px",
+                  padding: "12px",
+                  background: "var(--bg-input)",
                   borderRadius: "10px",
-                  background: selectedIncident.status === "Responding"
-                    ? "rgba(245, 158, 11, 0.12)"
-                    : selectedIncident.status === "Resolved"
-                    ? "rgba(16, 185, 129, 0.12)"
-                    : "rgba(239, 68, 68, 0.12)",
-                  border: `1px solid ${
-                    selectedIncident.status === "Responding"
-                      ? "rgba(245, 158, 11, 0.3)"
-                      : selectedIncident.status === "Resolved"
-                      ? "rgba(16, 185, 129, 0.3)"
-                      : "rgba(239, 68, 68, 0.3)"
-                  }`,
-                  marginBottom: "20px",
-                  fontSize: "0.9rem"
+                  marginBottom: "18px",
+                  textAlign: "center"
                 }}
               >
-                {selectedIncident.status === "Active" && (
-                  <div>🚨 <strong>Incident Transmitted:</strong> Responders are reviewing nearby hospitals and ambulances.</div>
-                )}
-                {selectedIncident.status === "Responding" && (
-                  <div>🚑 <strong>Units Dispatched:</strong> Hospital reserved and ambulance is en route to your coordinates.</div>
-                )}
-                {selectedIncident.status === "Resolved" && (
-                  <div>✅ <strong>Emergency Resolved:</strong> Medical care delivered. Incident officially closed.</div>
-                )}
+                <div style={{ opacity: 1 }}>
+                  <div style={{ fontSize: "0.7rem", color: "#34D399", fontWeight: 700 }}>1. SOS SENT</div>
+                  <div style={{ height: "4px", background: "#10B981", borderRadius: "2px", marginTop: "4px" }} />
+                </div>
+                <div style={{ opacity: selectedIncident.status !== "Active" || selectedIncident.ambulanceId ? 1 : 0.4 }}>
+                  <div style={{ fontSize: "0.7rem", color: selectedIncident.ambulanceId ? "#34D399" : "var(--text-dim)", fontWeight: 700 }}>
+                    2. DISPATCHED
+                  </div>
+                  <div style={{ height: "4px", background: selectedIncident.ambulanceId ? "#10B981" : "var(--border-color)", borderRadius: "2px", marginTop: "4px" }} />
+                </div>
+                <div style={{ opacity: selectedIncident.ambulanceStatus === "Transporting" || selectedIncident.status === "Resolved" ? 1 : 0.4 }}>
+                  <div style={{ fontSize: "0.7rem", color: selectedIncident.ambulanceStatus === "Transporting" ? "#FBBF24" : "var(--text-dim)", fontWeight: 700 }}>
+                    3. EN ROUTE ER
+                  </div>
+                  <div style={{ height: "4px", background: selectedIncident.ambulanceStatus === "Transporting" ? "#F59E0B" : "var(--border-color)", borderRadius: "2px", marginTop: "4px" }} />
+                </div>
+                <div style={{ opacity: selectedIncident.status === "Resolved" ? 1 : 0.4 }}>
+                  <div style={{ fontSize: "0.7rem", color: selectedIncident.status === "Resolved" ? "#34D399" : "var(--text-dim)", fontWeight: 700 }}>
+                    4. DELIVERED
+                  </div>
+                  <div style={{ height: "4px", background: selectedIncident.status === "Resolved" ? "#10B981" : "var(--border-color)", borderRadius: "2px", marginTop: "4px" }} />
+                </div>
               </div>
 
-              {/* Assigned Resources Panel */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", marginBottom: "20px" }}>
-                {/* Hospital Card */}
-                <div style={{ padding: "14px", background: "var(--bg-input)", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#38BDF8", marginBottom: "8px", fontWeight: 700, fontSize: "0.85rem" }}>
-                    <Building2 size={18} /> Assigned Hospital
+              {/* Assigned Resources Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "18px" }}>
+                {/* Hospital */}
+                <div style={{ padding: "12px", background: "var(--bg-input)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#38BDF8", marginBottom: "6px", fontWeight: 700, fontSize: "0.825rem" }}>
+                    <Building2 size={16} /> Destination Hospital
                   </div>
                   {selectedIncident.hospitalId ? (
                     <div>
-                      <div style={{ fontWeight: 700, color: "#FFFFFF", fontSize: "0.95rem" }}>{selectedIncident.hospitalId.name}</div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                        {selectedIncident.hospitalId.address?.city}, {selectedIncident.hospitalId.address?.state}
+                      <div style={{ fontWeight: 700, color: "#FFFFFF", fontSize: "0.9rem" }}>{selectedIncident.hospitalId.name}</div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        {selectedIncident.hospitalId.address?.city} • Beds Ready: {selectedIncident.hospitalId.availableBeds}
                       </div>
                       {selectedIncident.hospitalId.phone && (
-                        <div style={{ fontSize: "0.8rem", color: "#34D399", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <a
+                          href={`tel:${selectedIncident.hospitalId.phone}`}
+                          style={{ fontSize: "0.75rem", color: "#34D399", marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "4px", textDecoration: "none", fontWeight: 600 }}
+                        >
                           <Phone size={12} /> {selectedIncident.hospitalId.phone}
-                        </div>
+                        </a>
                       )}
                     </div>
                   ) : (
-                    <div style={{ fontSize: "0.85rem", color: "var(--text-dim)" }}>Pending assignment...</div>
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>AI matching nearest trauma bed...</div>
                   )}
                 </div>
 
-                {/* Ambulance Card */}
-                <div style={{ padding: "14px", background: "var(--bg-input)", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#F59E0B", marginBottom: "8px", fontWeight: 700, fontSize: "0.85rem" }}>
-                    <Ambulance size={18} /> Assigned Ambulance
+                {/* Ambulance */}
+                <div style={{ padding: "12px", background: "var(--bg-input)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#F59E0B", marginBottom: "6px", fontWeight: 700, fontSize: "0.825rem" }}>
+                    <Ambulance size={16} /> Assigned Ambulance
                   </div>
                   {selectedIncident.ambulanceId ? (
                     <div>
-                      <div style={{ fontWeight: 700, color: "#FFFFFF", fontSize: "0.95rem" }}>
+                      <div style={{ fontWeight: 700, color: "#FFFFFF", fontSize: "0.9rem" }}>
                         {selectedIncident.ambulanceId.vehicleNumber}
                       </div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
                         Driver: {selectedIncident.ambulanceId.driverName}
                       </div>
                       {selectedIncident.ambulanceId.driverPhone && (
-                        <div style={{ fontSize: "0.8rem", color: "#34D399", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                          <Phone size={12} /> {selectedIncident.ambulanceId.driverPhone}
-                        </div>
+                        <a
+                          href={`tel:${selectedIncident.ambulanceId.driverPhone}`}
+                          style={{ fontSize: "0.75rem", color: "#34D399", marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "4px", textDecoration: "none", fontWeight: 600 }}
+                        >
+                          <Phone size={12} /> Call Driver
+                        </a>
                       )}
                     </div>
                   ) : (
-                    <div style={{ fontSize: "0.85rem", color: "var(--text-dim)" }}>Pending assignment...</div>
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Locating closest available unit...</div>
                   )}
                 </div>
               </div>
 
-              {/* Map & Live Route */}
+              {/* Live Tactical Map */}
               <EmergencyMap
                 interactive={false}
                 selectedLocation={{ latitude: selectedIncident.latitude, longitude: selectedIncident.longitude }}
                 selectedHospital={selectedIncident.hospitalId}
-                height="320px"
+                assignedAmbulance={selectedIncident.ambulanceId}
+                height="300px"
               />
+
+              {/* AI Bystander First-Aid Assistant */}
+              {firstAidGuide && (
+                <div
+                  style={{
+                    marginTop: "20px",
+                    padding: "16px",
+                    background: "rgba(16, 185, 129, 0.08)",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    borderRadius: "10px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <Sparkles size={18} color="#10B981" />
+                    <h4 style={{ fontSize: "0.95rem", color: "#34D399", fontWeight: 800 }}>
+                      AI Emergency Copilot: {firstAidGuide.title}
+                    </h4>
+                  </div>
+                  <p style={{ fontSize: "0.825rem", color: "var(--text-muted)", marginBottom: "12px" }}>
+                    While emergency responders are en route, follow these life-support protocols carefully:
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.825rem" }}>
+                    {firstAidGuide.steps.map((st, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <span style={{ fontWeight: 800, color: "#10B981", minWidth: "18px" }}>{i + 1}.</span>
+                        <span style={{ color: "#FFFFFF" }}>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {firstAidGuide.warnings?.length > 0 && (
+                    <div style={{ marginTop: "12px", padding: "8px 12px", background: "rgba(239, 68, 68, 0.15)", borderRadius: "6px", fontSize: "0.775rem", color: "#F87171" }}>
+                      <strong>Critical Precautions:</strong> {firstAidGuide.warnings.join(" ")}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Life-Saver Recognition Celebration Modal */}
+      {celebrationIncident && (
+        <div className="modal-overlay" onClick={() => handleAcknowledgeCelebration(celebrationIncident._id)}>
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              textAlign: "center",
+              padding: "36px 28px",
+              background: "linear-gradient(135deg, #064E3B 0%, #0B0F19 80%)",
+              border: "2px solid #10B981",
+              boxShadow: "0 0 50px rgba(16, 185, 129, 0.4)"
+            }}
+          >
+            <div
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 18px",
+                boxShadow: "0 0 25px rgba(16, 185, 129, 0.6)"
+              }}
+            >
+              <HeartPulse size={40} color="#FFFFFF" className="animate-heartbeat" />
+            </div>
+
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "4px 14px", borderRadius: "999px", background: "rgba(16, 185, 129, 0.2)", color: "#34D399", fontWeight: 800, fontSize: "0.8rem", marginBottom: "12px" }}>
+              <Sparkles size={14} /> LIFE-SAVER RECOGNITION
+            </div>
+
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 800, color: "#FFFFFF", marginBottom: "12px", lineHeight: 1.2 }}>
+              You Helped Save a Life Today!
+            </h2>
+
+            <p style={{ fontSize: "1rem", color: "#E2E8F0", maxWidth: "480px", margin: "0 auto 20px", lineHeight: 1.6 }}>
+              Thank you for your swift action and civic courage. The patient from incident <strong style={{ color: "#34D399" }}>#{celebrationIncident._id.slice(-6)}</strong> has been safely transported by ambulance to <strong style={{ color: "#38BDF8" }}>{celebrationIncident.hospitalId?.name || "the emergency trauma center"}</strong> and admitted into acute care.
+            </p>
+
+            <div style={{ padding: "14px", background: "rgba(17, 24, 39, 0.7)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)", marginBottom: "24px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              🚑 Ambulance <strong style={{ color: "#FFFFFF" }}>{celebrationIncident.ambulanceId?.vehicleNumber || "Unit"}</strong> has successfully completed the mission and returned to standby readiness in Mysuru.
+            </div>
+
+            <button
+              onClick={() => handleAcknowledgeCelebration(celebrationIncident._id)}
+              className="btn btn-success btn-lg"
+              style={{ minWidth: "220px", fontWeight: 800 }}
+            >
+              <CheckCircle2 size={18} /> Continue to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
